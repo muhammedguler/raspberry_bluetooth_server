@@ -4,6 +4,8 @@ import time
 from bluetooth import *
 import threading
 import netifaces
+import cups
+import json
 
 class BluetoothServer:
     def __init__(self) -> None:
@@ -16,8 +18,7 @@ class BluetoothServer:
         self.wifipassword = None
         self.ip = None
         self.WifiConnection = False
-
-
+        self.printerStatus = None
 
     def open_pair_mode(self):
         os.system("bluetoothctl discoverable on")
@@ -43,6 +44,7 @@ class BluetoothServer:
     def send_ip(self):
         self.ip = None
         self.timeout = time.time()
+        self.WifiConnection = True
         while((self.ip==None) and (self.WifiConnection) ):
             try:
                 time.sleep(0.01)
@@ -53,7 +55,29 @@ class BluetoothServer:
             except:
                 pass
         print(self.ip)  # should print "192.168.100.37"
-        self.client_sock.send(self.ip.encode())
+        if(self.ip != None): # bağlantı kuruldu ise devam et
+            self.SendJson = {'Command':'IP','Data':self.ip}
+            self.client_sock.send(json.dumps(self.SendJson,indent=4).encode()) 
+            self.SendJson = {'Command':'URL','Data':"http://" + self.ip + ":5000/"}# CP BOX mobilin bağlanacağı url 😹
+            self.client_sock.send(json.dumps(self.SendJson,indent=4).encode())
+            self.checkPrinter() #IP gönderilebiliyorsa yazıcı da gönderilebilir 
+            self.check_DBYS_Connection() # IP gönderilebiliyorsa bağlantıyı kontrol edebilir
+
+    def checkPrinter(self):
+        conn = cups.Connection()
+        self.printers = conn.getDefault()
+        #self.printerStatus = printers #bağlı yazıcının adını yada None Döner
+        self.printerStatus = False if self.printers == None else True #yazıcı bağlı ise True döner 
+        self.SendJson = {'Command':'PRINTER','Data':{'isAvaible':self.printerStatus,'Name':self.printers}}
+        self.client_sock.send(json.dumps(self.SendJson,indent=4).encode()) # gönderilecek mesaj düzenlenmeli
+
+    def check_DBYS_Connection(self):
+        self.DbysConnected = False
+        self.hostName = "www.dnsins.com"
+        response = os.system("ping -c 1 " + self.hostName)
+        self.DbysConnected = True if response == 0 else False
+        self.SendJson = {'Command':'DBYS_CONNECTION','Data':{'isAvaible':self.DbysConnected,'Name':self.hostName}}
+        self.client_sock.send(json.dumps(self.SendJson,indent=4).encode()) # gönderilecek mesaj düzenlenmeli
         
     def waiting_connection(self):
         while True:
@@ -94,7 +118,6 @@ network={{
                 print("wifi password:",self.wifipassword)
                 if((time.time()-self.startTime)<0.05):
                     time.sleep((0.05-(time.time()-self.startTime)))
-                self.WifiConnection = True
                 threading.Thread(target=self.send_ip,daemon=True).start()
             except IOError:
                 print("Connection disconnected!")
