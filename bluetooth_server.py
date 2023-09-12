@@ -62,6 +62,7 @@ class BluetoothServer:
             self.client_sock.send(json.dumps(self.SendJson,indent=4).encode())
             self.checkPrinter() #IP gönderilebiliyorsa yazıcı da gönderilebilir 
             self.check_DBYS_Connection() # IP gönderilebiliyorsa bağlantıyı kontrol edebilir
+            self.getSerialNumber()
 
     def checkPrinter(self):
         conn = cups.Connection()
@@ -78,7 +79,21 @@ class BluetoothServer:
         self.DbysConnected = True if response == 0 else False
         self.SendJson = {'Command':'DBYS_CONNECTION','Data':{'isAvaible':self.DbysConnected,'Name':self.hostName}}
         self.client_sock.send(json.dumps(self.SendJson,indent=4).encode()) # gönderilecek mesaj düzenlenmeli
-        
+
+    def getSerialNumber(self):
+        # Extract serial from cpuinfo file
+        self.cpuserial = "0000000000000000"
+        try:
+            f = open('/proc/cpuinfo','r')
+            for line in f:
+                if line[0:6]=='Serial':
+                    self.cpuserial = line[10:26]
+            f.close()
+        except:
+            self.cpuserial = "ERROR000000000"
+        self.SendJson = {'Command':'SERIAL_NUMBER','Data':self.cpuserial}
+        self.client_sock.send(json.dumps(self.SendJson,indent=4).encode()) 
+
     def waiting_connection(self):
         while True:
             self.wifiname = None
